@@ -1,0 +1,785 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "SupervIA Metrics & Alerting Service API",
+    "version": "1.0.0",
+    "description": "API pour la collecte, la consultation et l'alerting des métriques de l'écosystème SupervIA. Ce service communique avec Prometheus et les autres microservices.",
+    "contact": {
+      "name": "SupervIA Team",
+      "email": "contact@supervia.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/zkerkeb-class/metrics-service-Tadayoshi123/blob/main/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3003",
+      "description": "Serveur de développement"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "AdminAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token JWT pour un utilisateur avec le rôle 'admin', requis pour les opérations de modification (forcer la collecte, résoudre des alertes, etc.)."
+      },
+      "ServiceAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token JWT pour l'authentification inter-services, utilisé par les autres services pour soumettre des alertes par exemple."
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "errorCode": {
+            "type": "string",
+            "example": "NOT_FOUND"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Metric": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nom de la métrique (ex: cpu_usage)."
+          },
+          "value": {
+            "type": "number",
+            "description": "Valeur actuelle de la métrique."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "gauge",
+              "counter"
+            ],
+            "description": "Type de métrique."
+          },
+          "help": {
+            "type": "string",
+            "description": "Description de la métrique."
+          },
+          "labels": {
+            "type": "object",
+            "description": "Labels additionnels."
+          }
+        }
+      },
+      "ServiceMetrics": {
+        "type": "object",
+        "properties": {
+          "serviceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UP",
+              "DOWN",
+              "UNKNOWN"
+            ]
+          },
+          "lastSeen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            }
+          }
+        }
+      },
+      "Alert": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service": {
+            "type": "string",
+            "description": "ID du service concerné."
+          },
+          "alertName": {
+            "type": "string",
+            "description": "Nom de la règle d'alerte."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Message d'alerte."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "firing",
+              "resolved"
+            ]
+          },
+          "value": {
+            "type": "number",
+            "description": "Valeur qui a déclenché l'alerte."
+          },
+          "threshold": {
+            "type": "number",
+            "description": "Seuil qui a été dépassé."
+          },
+          "firedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AlertCreate": {
+        "type": "object",
+        "required": [
+          "service",
+          "alertName",
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "alertName": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          },
+          "threshold": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Endpoints de santé et de statut du service."
+    },
+    {
+      "name": "Metrics",
+      "description": "Endpoints pour la consultation des métriques des services."
+    },
+    {
+      "name": "Alerts",
+      "description": "Endpoints pour la gestion des alertes."
+    },
+    {
+      "name": "Admin",
+      "description": "Endpoints administratifs (protégés)."
+    }
+  ],
+  "paths": {
+    "/api/v1/alerts": {
+      "get": {
+        "summary": "Récupérer la liste des alertes",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "serviceId",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtrer les alertes par ID de service."
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "info",
+                "warning",
+                "error",
+                "critical"
+              ]
+            },
+            "description": "Filtrer par sévérité."
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "firing",
+                "resolved"
+              ],
+              "default": "firing"
+            },
+            "description": "Filtrer par statut."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Une liste d'alertes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Alert"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Créer une alerte manuellement",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Alerte créée."
+          },
+          "401": {
+            "description": "Authentification requise."
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{alertId}": {
+      "get": {
+        "summary": "Récupérer les détails d'une alerte spécifique",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alertId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Détails de l'alerte.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Alerte non trouvée."
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/service": {
+      "post": {
+        "summary": "Endpoint pour les services internes pour déclencher une alerte",
+        "tags": [
+          "Alerts"
+        ],
+        "security": [
+          {
+            "ServiceAuth": []
+          }
+        ],
+        "description": "Cet endpoint est utilisé par d'autres microservices pour signaler une alerte. Nécessite un token de service valide.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Alerte reçue et traitée."
+          },
+          "401": {
+            "description": "Token de service invalide."
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{alertId}/resolve": {
+      "post": {
+        "summary": "Marquer une alerte comme résolue",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alertId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alerte résolue."
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Vérifie la santé globale du service et ses dépendances.",
+        "tags": [
+          "Health"
+        ],
+        "description": "Cet endpoint retourne un statut détaillé, incluant la connectivité à Redis et l'état des services surveillés. C'est l'endpoint le plus complet pour le health check.",
+        "responses": {
+          "200": {
+            "description": "Le service est sain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "UP"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "dependencies": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "example": "Redis"
+                          },
+                          "status": {
+                            "type": "string",
+                            "example": "UP"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Le service ou l'une de ses dépendances est en panne.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/liveness": {
+      "get": {
+        "summary": "Sonde de vivacité (liveness probe).",
+        "tags": [
+          "Health"
+        ],
+        "description": "Endpoint très léger pour les orchestrateurs (Kubernetes, Docker Swarm) afin de vérifier si le processus du service est en cours d'exécution. Retourne toujours 200 OK si le serveur HTTP répond.",
+        "responses": {
+          "200": {
+            "description": "Le service est en vie.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "live"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readiness": {
+      "get": {
+        "summary": "Sonde de préparation (readiness probe).",
+        "tags": [
+          "Health"
+        ],
+        "description": "Endpoint pour les orchestrateurs afin de vérifier si le service est prêt à accepter du trafic. Il vérifie les connexions critiques, comme celle à Redis.",
+        "responses": {
+          "200": {
+            "description": "Le service est prêt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ready"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Le service n'est pas prêt."
+          }
+        }
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "summary": "Récupérer les métriques actuelles de tous les services",
+        "tags": [
+          "Metrics"
+        ],
+        "description": "Retourne un tableau avec l'état et les dernières métriques collectées pour chaque service surveillé.",
+        "responses": {
+          "200": {
+            "description": "Liste des métriques par service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ServiceMetrics"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/{serviceId}": {
+      "get": {
+        "summary": "Récupérer les métriques d'un service spécifique",
+        "tags": [
+          "Metrics"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID du service (ex: 'auth-service')."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Métriques du service demandé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceMetrics"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service non trouvé."
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/{serviceId}/history": {
+      "get": {
+        "summary": "Récupérer l'historique des métriques d'un service",
+        "tags": [
+          "Metrics"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "L'ID du service."
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Date de début (ISO 8601)."
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Date de fin (ISO 8601)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Un tableau de snapshots de métriques historiques."
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/{serviceId}/collect": {
+      "post": {
+        "summary": "Forcer la collecte pour un service spécifique",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collecte terminée."
+          },
+          "401": {
+            "description": "Authentification requise."
+          },
+          "403": {
+            "description": "Droits admin requis."
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/collect": {
+      "post": {
+        "summary": "Forcer la collecte des métriques pour tous les services",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "description": "(Admin requis) Déclenche manuellement une passe de collecte des métriques sur tous les services configurés.",
+        "responses": {
+          "200": {
+            "description": "Collecte terminée avec succès."
+          },
+          "401": {
+            "description": "Authentification requise."
+          },
+          "403": {
+            "description": "Droits admin requis."
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/prometheus/query": {
+      "post": {
+        "summary": "Exécuter une requête PromQL instantanée",
+        "tags": [
+          "Metrics",
+          "Prometheus"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Permet d'exécuter une requête PromQL instantanée directement sur Prometheus via le service de métriques. Ceci est utilisé par le frontend pour peupler les blocs de dashboard dynamiques.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "La requête PromQL à exécuter.",
+                    "example": "rate(http_requests_total{job=\"auth-service\"}[5m])"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Résultat de la requête Prometheus."
+          },
+          "400": {
+            "description": "Requête invalide."
+          },
+          "401": {
+            "description": "Non authentifié."
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/prometheus/query_range": {
+      "post": {
+        "summary": "Exécuter une requête PromQL sur une période (range query)",
+        "tags": [
+          "Metrics",
+          "Prometheus"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Permet d'exécuter une requête PromQL sur une période (range query) directement sur Prometheus. Utile pour les graphiques temporels.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "La requête PromQL à exécuter.",
+                    "example": "rate(http_requests_total{job=\"auth-service\"}[5m])"
+                  },
+                  "start": {
+                    "type": "string",
+                    "description": "Timestamp de début (RFC3339 ou Unix timestamp).",
+                    "example": "2023-10-27T10:00:00.000Z"
+                  },
+                  "end": {
+                    "type": "string",
+                    "description": "Timestamp de fin (RFC3339 ou Unix timestamp).",
+                    "example": "2023-10-27T11:00:00.000Z"
+                  },
+                  "step": {
+                    "type": "string",
+                    "description": "Pas de temps de la requête (e.g., '15s', '1m', '1h').",
+                    "example": "1m"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Résultat de la requête Prometheus."
+          },
+          "400": {
+            "description": "Requête invalide."
+          },
+          "401": {
+            "description": "Non authentifié."
+          }
+        }
+      }
+    }
+  }
+}

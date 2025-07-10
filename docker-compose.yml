@@ -1,0 +1,112 @@
+# ==============================================
+# 📊 SERVICE DE MÉTRIQUES SUPERVIA
+# ==============================================
+# Ce fichier déploie uniquement le service de métriques
+# L'infrastructure (Redis, Prometheus, Grafana) est dans /infra/
+
+version: '3.8'
+
+services:
+  # ===================================
+  # 📊 Service de Métriques SupervIA
+  # ===================================
+  metrics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: supervia-metrics-service
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      # Configuration de base
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-3003}
+      - LOG_LEVEL=info
+      
+      # Redis partagé (utilise l'infra partagée)
+      - REDIS_URL=${REDIS_URL:-redis://supervia-redis:6379/3}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=2
+      
+      # Authentification JWT
+      - JWT_SECRET=${JWT_SECRET}
+      
+      # Services à monitorer (utilise les URLs de l'infra partagée)
+      - AUTH_SERVICE_URL=http://supervia-auth-service:3001
+      - DB_SERVICE_URL=http://supervia-db-service:3002
+      - AI_SERVICE_URL=http://supervia-ai-service:3004
+      - NOTIFICATION_SERVICE_URL=http://supervia-notification-service:3005
+      - PAYMENT_SERVICE_URL=http://supervia-payment-service:3006
+      - FRONTEND_URL=${FRONTEND_URL:-http://supervia-frontend-gateway:3000}
+      - ALERT_RECIPIENT_EMAIL=${ALERT_RECIPIENT_EMAIL:-admin@supervia.com}
+      
+      # Prometheus (utilise l'infra partagée)
+      - PROMETHEUS_URL=http://supervia-prometheus:9090
+      
+      # Configuration de collecte
+      - COLLECTION_INTERVAL=30
+      - DATA_RETENTION_DAYS=30
+      - ALERT_THRESHOLD_CPU=80
+      - ALERT_THRESHOLD_MEMORY=85
+      - ALERT_THRESHOLD_RESPONSE_TIME=2000
+      
+      # Notifications d'alertes
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      
+      # Configuration avancée
+      - MAX_CONCURRENT_COLLECTIONS=5
+      - METRICS_HISTORY_CLEANUP_INTERVAL=86400
+    
+    volumes:
+      - ./data:/app/data
+      - metrics-logs:/app/logs
+      - metrics-config:/app/config
+    
+    networks:
+      - supervia-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Note: Les services d'infrastructure doivent être démarrés en premier
+    # Pas de depends_on vers des services externes pour éviter les erreurs
+
+# ===================================
+# 📦 Volumes Locaux
+# ===================================
+volumes:
+  metrics-data:
+    driver: local
+  metrics-logs:
+    driver: local
+  metrics-config:
+    driver: local
+
+# ===================================
+# 🌐 Réseau (utilise le réseau partagé)
+# ===================================
+networks:
+  supervia-network:
+    external: true
+    name: infra_supervia-network 

@@ -1,0 +1,119 @@
+# ===================================
+# 📂 DOSSIERS DE DÉVELOPPEMENT
+# ===================================
+node_modules/
+coverage/
+.nyc_output/
+logs/
+temp/
+tmp/
+
+# ===================================
+# 📄 FICHIERS DE CONFIGURATION
+# ===================================
+.env
+.env.*
+!.env.example
+nodemon.json
+
+# ===================================
+# 🔧 OUTILS DE DÉVELOPPEMENT
+# ===================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.eslintcache
+
+# ===================================
+# 📊 FICHIERS DE BUILD ET CACHE
+# ===================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.cache/
+dist/
+build/
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ===================================
+# 🔐 FICHIERS SENSIBLES
+# ===================================
+data/
+storage/
+uploads/
+secrets/
+.secrets/
+
+# ===================================
+# 📦 FICHIERS OS
+# ===================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==============================================
+# 📊 GITIGNORE SERVICE DE MÉTRIQUES SUPERVIA
+# ==============================================
+# Infrastructure (Redis, Prometheus, Grafana) gérée dans /infra/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Data storage (service-specific)
+data/
+storage/
+uploads/
+temp/
+tmp/
+
+# Build outputs
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NOTE: Grafana, Prometheus et Redis sont maintenant dans /infra/ 
